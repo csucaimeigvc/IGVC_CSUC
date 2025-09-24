@@ -44,7 +44,7 @@ An autonomous ground vehicle project for the Intelligent Ground Vehicle Competit
 - USB-serial adapters (CH341SER compatible)
 
 ### Software Requirements
-- Ubuntu 20.04/22.04 LTS
+- Ubuntu 22.04 LTS
 - ROS2 Humble
 - Python 3.8+
 - Docker and Docker Compose
