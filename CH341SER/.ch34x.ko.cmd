@@ -1,0 +1,1 @@
+cmd_/home/igvc/CH341SER/ch34x.ko := ld -r -EL  -maarch64elf -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/igvc/CH341SER/ch34x.ko /home/igvc/CH341SER/ch34x.o /home/igvc/CH341SER/ch34x.mod.o;  true

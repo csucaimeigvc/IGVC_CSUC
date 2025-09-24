@@ -1,0 +1,331 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  ROS_DISTRO: humble
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  # Lint and format check
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip python3-opencv python3-numpy
+        pip3 install black flake8 mypy pytest
+    
+    - name: Run black formatter
+      run: black --check --diff .
+    
+    - name: Run flake8 linter
+      run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    
+    - name: Run mypy type checker
+      run: mypy . --ignore-missing-imports
+
+  # Unit tests
+  test:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-opencv \
+          python3-numpy \
+          python3-flask \
+          python3-requests \
+          python3-pil \
+          python3-yaml \
+          python3-tqdm \
+          python3-matplotlib \
+          python3-scipy \
+          python3-psutil \
+          python3-pytest \
+          python3-pytest-cov
+    
+    - name: Install Python dependencies
+      run: |
+        pip3 install -r requirements.txt
+        pip3 install pytest-cov coverage
+    
+    - name: Run tests
+      run: |
+        python3 -m pytest tests/ -v --cov=. --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # ROS2 tests
+  ros2-test:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install ROS2 Humble
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository universe
+        sudo apt-get update && sudo apt-get install curl -y
+        sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y \
+          ros-humble-desktop \
+          python3-argcomplete \
+          python3-colcon-common-extensions \
+          python3-rosdep \
+          python3-vcstool
+    
+    - name: Set up ROS2 environment
+      run: |
+        source /opt/ros/humble/setup.bash
+        rosdep init
+        rosdep update
+    
+    - name: Build ROS2 workspace
+      run: |
+        cd ros2_ws
+        source /opt/ros/humble/setup.bash
+        rosdep install --from-paths src --ignore-src -r -y
+        colcon build --packages-select sllidar_ros2 ublox_gps ublox_msgs ublox_serialization
+    
+    - name: Test ROS2 packages
+      run: |
+        cd ros2_ws
+        source /opt/ros/humble/setup.bash
+        source install/setup.bash
+        colcon test --packages-select sllidar_ros2 ublox_gps ublox_msgs ublox_serialization
+        colcon test-result --all
+
+  # Docker build and test
+  docker:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build -t igvc-robot:latest .
+        docker build -t igvc-robot:dev --target development .
+        docker build -t igvc-robot:prod --target production .
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm igvc-robot:latest python3 -c "import depthai; import cv2; import numpy"
+        docker run --rm igvc-robot:dev python3 -c "import pytest; import jupyter"
+    
+    - name: Run health check
+      run: |
+        docker run --rm igvc-robot:latest python3 /app/scripts/health_check.sh
+
+  # Security scan
+  security:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Integration tests
+  integration:
+    runs-on: ubuntu-22.04
+    needs: [test, ros2-test, docker]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
+    
+    - name: Start services
+      run: |
+        docker-compose up -d
+        sleep 30
+    
+    - name: Run integration tests
+      run: |
+        # Test web interface
+        curl -f http://localhost:5000/status || exit 1
+        
+        # Test inference server
+        curl -f http://localhost:9001/health || exit 1
+        
+        # Test ROS2 topics
+        source /opt/ros/humble/setup.bash
+        ros2 topic list || exit 1
+    
+    - name: Stop services
+      run: |
+        docker-compose down
+
+  # Performance tests
+  performance:
+    runs-on: ubuntu-22.04
+    needs: [test, docker]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install performance testing tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip \
+          python3-opencv \
+          python3-numpy \
+          python3-flask \
+          python3-requests
+    
+    - name: Install Python dependencies
+      run: |
+        pip3 install -r requirements.txt
+        pip3 install locust
+    
+    - name: Run performance tests
+      run: |
+        # Test camera processing performance
+        python3 -c "
+        import time
+        import cv2
+        import numpy as np
+        
+        # Create test image
+        img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+        
+        # Test processing speed
+        start = time.time()
+        for i in range(100):
+            resized = cv2.resize(img, (320, 240))
+            blurred = cv2.GaussianBlur(resized, (5, 5), 0)
+        end = time.time()
+        
+        print(f'Processing time: {end - start:.2f} seconds')
+        assert (end - start) < 5.0, 'Processing too slow'
+        "
+    
+    - name: Run load tests
+      run: |
+        # Test web interface performance
+        python3 -c "
+        import requests
+        import time
+        
+        start = time.time()
+        for i in range(10):
+            response = requests.get('http://localhost:5000/status', timeout=5)
+            assert response.status_code == 200
+        end = time.time()
+        
+        print(f'Response time: {(end - start) / 10:.2f} seconds per request')
+        assert (end - start) / 10 < 1.0, 'Response too slow'
+        "
+
+  # Build and push Docker images
+  build-and-push:
+    runs-on: ubuntu-22.04
+    needs: [test, ros2-test, docker, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Build and push Docker images
+      run: |
+        docker buildx build --platform linux/amd64,linux/arm64 \
+          -t ${{ secrets.DOCKER_USERNAME }}/igvc-robot:latest \
+          -t ${{ secrets.DOCKER_USERNAME }}/igvc-robot:${{ github.sha }} \
+          --push .
+
+  # Deploy to staging
+  deploy-staging:
+    runs-on: ubuntu-22.04
+    needs: [build-and-push]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add deployment commands here
+
+  # Deploy to production
+  deploy-production:
+    runs-on: ubuntu-22.04
+    needs: [build-and-push]
+    if: github.event_name == 'release'
+    environment: production
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add deployment commands here
+
+  # Notify on failure
+  notify:
+    runs-on: ubuntu-22.04
+    needs: [test, ros2-test, docker, security, integration, performance]
+    if: failure()
+    steps:
+    - name: Notify on failure
+      run: |
+        echo "CI/CD pipeline failed. Please check the logs."
+        # Add notification logic here (Slack, email, etc.)

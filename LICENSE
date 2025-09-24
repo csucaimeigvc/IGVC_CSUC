@@ -1,0 +1,86 @@
+MIT License
+
+Copyright (c) 2024 IGVC Autonomous Robot Project
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## Third-Party Licenses
+
+This project includes third-party software components with their own licenses:
+
+### ROS2 Packages
+- **sllidar_ros2**: BSD License
+- **ublox_gps**: BSD License
+- **ublox_msgs**: BSD License
+- **ublox_serialization**: BSD License
+
+### Python Packages
+- **OpenCV**: Apache License 2.0
+- **NumPy**: BSD License
+- **Flask**: BSD License
+- **DepthAI**: MIT License
+- **Roboflow**: MIT License
+
+### Hardware Drivers
+- **CH341SER**: GPL License
+- **DepthAI SDK**: MIT License
+
+### Docker Images
+- **Ubuntu**: Various licenses (see Ubuntu legal notices)
+- **ROS2**: Apache License 2.0
+- **Roboflow Inference Server**: Commercial License
+
+## Attribution
+
+This project builds upon the work of many open-source projects and communities:
+
+- **ROS2 Community**: For the excellent robotics framework
+- **DepthAI/Luxonis**: For OAK-D camera support and SDK
+- **Roboflow**: For inference infrastructure and models
+- **Slamtec**: For RPLidar drivers and documentation
+- **u-blox**: For GPS solutions and drivers
+- **OpenCV Community**: For computer vision tools
+- **Python Community**: For the programming language and ecosystem
+
+## Disclaimer
+
+This software is designed for educational and competition purposes. Users are responsible for:
+
+1. **Safety**: Always follow safety guidelines when operating autonomous vehicles
+2. **Compliance**: Ensure compliance with local laws and regulations
+3. **Testing**: Thoroughly test the system before deployment
+4. **Maintenance**: Regular maintenance and updates are required
+5. **Liability**: Users assume all liability for the use of this software
+
+## Commercial Use
+
+For commercial use of this software, please contact the project maintainers for appropriate licensing terms.
+
+## Contributing
+
+By contributing to this project, you agree that your contributions will be licensed under the same MIT License that covers the project.
+
+## Contact
+
+For questions about licensing or commercial use, please contact:
+- Email: [your-email@domain.com]
+- GitHub: [your-github-username]
+- Project Repository: [repository-url]

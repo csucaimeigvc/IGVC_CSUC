@@ -1,0 +1,8 @@
+version: "3"
+services:
+  offline_tiles:
+    image: mapproxy/mapproxy
+    network_mode: host
+    volumes:
+      - ./mapproxy.yaml:/mapproxy/config/mapproxy.yaml:ro
+      - ~/maps:/mapproxy/data:ro

@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  # Main application service
+  igvc-robot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: igvc-robot
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyNEO_F10N:/dev/ttyNEO_F10N
+      - /dev/video0:/dev/video0
+    volumes:
+      - ./output_frames:/app/output_frames
+      - ./lane_segmentation_frames:/app/lane_segmentation_frames
+      - ./lane_segmentation_output:/app/lane_segmentation_output
+      - ./dataset:/app/dataset
+      - ./models:/app/models
+      - ./logs:/app/logs
+    environment:
+      - ROS_DOMAIN_ID=0
+      - PYTHONUNBUFFERED=1
+      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY}
+    ports:
+      - "5000:5000"
+    networks:
+      - igvc-network
+    depends_on:
+      - inference-server
+      - redis
+    healthcheck:
+      test: ["CMD", "python3", "/app/scripts/health_check.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Inference server
+  inference-server:
+    image: roboflow/roboflow-inference-server-trt-jetson-5.1.1
+    container_name: igvc-inference
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./models:/models
+      - ./logs:/logs
+    environment:
+      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY}
+      - MODEL_CACHE_DIR=/models
+    networks:
+      - igvc-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: igvc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - igvc-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: igvc-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - igvc-network
+    depends_on:
+      - igvc-robot
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring service
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: igvc-monitoring
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./logs/prometheus:/prometheus
+    networks:
+      - igvc-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  # Log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: igvc-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./logs/loki:/loki
+    networks:
+      - igvc-network
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Grafana dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: igvc-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    networks:
+      - igvc-network
+    depends_on:
+      - prometheus
+      - loki
+
+networks:
+  igvc-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+  grafana-data:
+    driver: local

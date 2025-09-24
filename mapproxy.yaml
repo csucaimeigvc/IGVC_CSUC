@@ -1,0 +1,14 @@
+sources:
+  osm:
+    type: tile
+    url: https://tile.openstreetmap.org/%(z)s/%(x)s/%(y)s.png
+layers:
+  - name: osm
+    title: Offline OSM
+    sources: [osm_cache]
+services:
+  tms:
+    use_grid_names: false
+caches:
+  osm_cache:
+    grids: [webmercator]
